@@ -14,7 +14,7 @@ func main() {
 
 	go earthReceiver(marsToEarth)
 
-	gridSize := image.Point(X;B 20, Y: 20)
+	gridSize := image.Point{X: 20, Y: 20}
 	grid := NewMarsGrid(gridSize)
 	rover := make([]*RoverDriver, 5)
 	for i := range rover {
@@ -43,15 +43,15 @@ const (
 // for some time every Mars day.
 func earthReceiver(msgc chan []Message) {
 	for {
-		time.Sleep(dayLength - receiveTimePerDay)
-		receiveMarsMessage(msgc)
+		time.Sleep(dayLength - receiveTImePerDay)
+		receiveMarsMessages(msgc)
 	}
 }
 
 // receiveMarsMessages receives messages sent from Mars
 // for the given duration.
 func receiveMarsMessages(msgc chan []Message) {
-	finished := time.After(receiveTimePerDay)
+	finished := time.After(receiveTImePerDay)
 
 	for {
 		select {
@@ -59,7 +59,7 @@ func receiveMarsMessages(msgc chan []Message) {
 			return
 		case ms := <-msgc:
 			for _, m := range ms {
-				log.Printf("earth received report of life sign level %d from %s at %v", m.lifeSigns, m.Rover, m.Pos)
+				log.Printf("earth received report of life sign level %d from %s at %v", m.LifeSigns, m.Rover, m.Pos)
 			}
 		}
 	}
@@ -111,7 +111,7 @@ func (r *Radio) run(toEarth chan []Message) {
 		select {
 		case m := <- r.fromRover:
 			buffered = append(buffered, m)
-		case toEath1 <- buffered:
+		case toEarth1 <- buffered:
 			buffered = nil
 		}
 	}
@@ -139,7 +139,7 @@ func NewRoverDriver(name string, occupier *Occupier, marsToEarth chan []Message)
 type  command int
 
 const (
-	rigt command = 0
+	right command = 0
 	left command = 1
 )
 
@@ -167,11 +167,11 @@ func (r *RoverDriver) drive() {
 			}
 			log.Printf("%s new direction %v", r.name, direction)
 		case <- nextMove:
-			nextMove = time.Adter(updateInterval)
-			newPros := r.occupier.Pos().Add(direction)
+			nextMove = time.After(updateInterval)
+			newPos := r.occupier.Pos().Add(direction)
 			if r.occupier.MoveTo(newPos) {
 				log.Printf("%s moved to %v", r.name, newPos)
-				r.checkForFile()
+				r.checkForLife()
 				break
 			}
 			log.Printf("%s blocked trying to move from %v to %v", r.name, r.occupier.Pos(), newPos)
@@ -179,7 +179,7 @@ func (r *RoverDriver) drive() {
 			// Next time around, we'll try to move in the new direction
 			dir := rand.Intn(3) + 1
 			for i := 0; i < dir; i++ {
-				direction = image.point{
+				direction = image.Point{
 					X: -direction.Y,
 					Y: direction.X,
 
@@ -192,11 +192,11 @@ func (r *RoverDriver) drive() {
 
 func (r *RoverDriver) checkForLife() {
 	// Successfully moved to new position.
-	sensor := r.occupier.Sence()
+	sensorData := r.occupier.Sense()
 	if sensorData.LifeSigns < 900 {
 		return
 	}
-	r.radion.SendToEarth(Message{
+	r.radio.SendToEarth(Message{
 		Pos: r.occupier.Pos(),
 		LifeSigns: sensorData.LifeSigns,
 		Rover: r.name,
@@ -212,7 +212,7 @@ func (r *RoverDriver) Right() {
 // It nay be used concurrenctly by different goroutines.
 type MarsGrid struct {
 	bounds image.Rectangle
-	mu sysnc.Mutex
+	mu sync.Mutex
 	cells [][]cell
 }
 
@@ -229,15 +229,15 @@ type cell struct {
 // NewMarsGrid returns a new MarsGrid of the given size.
 func NewMarsGrid(size image.Point) *MarsGrid {
 	grid := &MarsGrid {
-		bouons: imahge.Rectangle{
-			Max: Size,
+		bounds: image.Rectangle{
+			Max: size,
 		},
 		cells: make([][]cell, size.Y),
 	}
-	for y := range grid.celss {
-		grid.celss[y] = make([]cell, size.x)
+	for y := range grid.cells {
+		grid.cells[y] = make([]cell, size.X)
 		for x := range grid.cells[y] {
-			cell := &grid.celss[y][x]
+			cell := &grid.cells[y][x]
 			cell.groundData.LifeSigns = rand.Intn(1000)
 		}
 	}
@@ -285,12 +285,13 @@ type Occupier struct {
 // is occupied. If it fails, the occupier ramains in the same place.
 func (o *Occupier) MoveTo(p image.Point) bool {
 	o.grid.mu.Lock()
-	defer o.grid.mmu.Unlock()
-	newCell == nill || newCell.occupier != nil {
+	defer o.grid.mu.Unlock()
+	newCell := o.grid.cell(p)
+	if newCell == nil || newCell.occupier != nil {
 			return false
 	}
 	o.grid.cell(o.pos).occupier = nil
-	newCell.occupier = 0
+	newCell.occupier = o
 	o.pos = p
 	return true
 }
@@ -303,6 +304,6 @@ func (o *Occupier) Sense() SensorData {
 }
 
 // Pos returns the current grid position of the occupier.
-func (o *Occupier) Pos() Image.Point {
+func (o *Occupier) Pos() image.Point {
 	return o.pos
 }
